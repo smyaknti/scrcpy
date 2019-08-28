@@ -68,7 +68,7 @@ public final class Server {
     @SuppressWarnings("checkstyle:MagicNumber")
     private static Options createOptions(String... args) {
         if (args.length != 6) {
-            throw new IllegalArgumentException("Expecting 5 parameters");
+            throw new IllegalArgumentException("Expecting 6 parameters");
         }
 
         Options options = new Options();
@@ -116,7 +116,7 @@ public final class Server {
         try {
             new File(SERVER_PATH).delete();
         } catch (Exception e) {
-            Ln.e("Cannot unlink server", e);
+            Ln.e("Could not unlink server", e);
         }
     }
 

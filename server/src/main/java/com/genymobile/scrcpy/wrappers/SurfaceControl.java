@@ -2,6 +2,7 @@ package com.genymobile.scrcpy.wrappers;
 
 import android.annotation.SuppressLint;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.IBinder;
 import android.view.Surface;
 
@@ -77,7 +78,12 @@ public final class SurfaceControl {
 
     public static IBinder getBuiltInDisplay(int builtInDisplayId) {
         try {
-            return (IBinder) CLASS.getMethod("getBuiltInDisplay", int.class).invoke(null, builtInDisplayId);
+            // the method signature has changed in Android Q
+            // <https://github.com/Genymobile/scrcpy/issues/586>
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                return (IBinder) CLASS.getMethod("getBuiltInDisplay", int.class).invoke(null, builtInDisplayId);
+            }
+            return (IBinder) CLASS.getMethod("getPhysicalDisplayToken", long.class).invoke(null, builtInDisplayId);
         } catch (Exception e) {
             throw new AssertionError(e);
         }

@@ -17,6 +17,8 @@ struct args {
     const char *serial;
     const char *crop;
     const char *record_filename;
+    const char *window_title;
+    const char *push_target;
     enum recorder_format record_format;
     bool fullscreen;
     bool no_control;
@@ -33,6 +35,11 @@ struct args {
 };
 
 static void usage(const char *arg0) {
+#ifdef __APPLE__
+# define CTRL_OR_CMD "Cmd"
+#else
+# define CTRL_OR_CMD "Ctrl"
+#endif
     fprintf(stderr,
         "Usage: %s [options]\n"
         "\n"
@@ -75,6 +82,11 @@ static void usage(const char *arg0) {
         "        Set the TCP port the client listens on.\n"
         "        Default is %d.\n"
         "\n"
+        "    --push-target path\n"
+        "        Set the target directory for pushing files to the device by\n"
+        "        drag & drop. It is passed as-is to \"adb push\".\n"
+        "        Default is \"/sdcard/\".\n"
+        "\n"
         "    -r, --record file.mp4\n"
         "        Record screen to file.\n"
         "        The format is determined by the -F/--record-format option if\n"
@@ -86,7 +98,7 @@ static void usage(const char *arg0) {
         "        This flag forces to render all frames, at a cost of a\n"
         "        possible increased latency.\n"
         "\n"
-        "    -s, --serial\n"
+        "    -s, --serial serial\n"
         "        The device serial number. Mandatory only if several devices\n"
         "        are connected to adb.\n"
         "\n"
@@ -103,15 +115,18 @@ static void usage(const char *arg0) {
         "    -v, --version\n"
         "        Print the version of scrcpy.\n"
         "\n"
+        "    --window-title text\n"
+        "        Set a custom window title.\n"
+        "\n"
         "Shortcuts:\n"
         "\n"
-        "    Ctrl+f\n"
+        "    " CTRL_OR_CMD "+f\n"
         "        switch fullscreen mode\n"
         "\n"
-        "    Ctrl+g\n"
+        "    " CTRL_OR_CMD "+g\n"
         "        resize window to 1:1 (pixel-perfect)\n"
         "\n"
-        "    Ctrl+x\n"
+        "    " CTRL_OR_CMD "+x\n"
         "    Double-click on black borders\n"
         "        resize window to remove black borders\n"
         "\n"
@@ -119,48 +134,48 @@ static void usage(const char *arg0) {
         "    Middle-click\n"
         "        click on HOME\n"
         "\n"
-        "    Ctrl+b\n"
-        "    Ctrl+Backspace\n"
+        "    " CTRL_OR_CMD "+b\n"
+        "    " CTRL_OR_CMD "+Backspace\n"
         "    Right-click (when screen is on)\n"
         "        click on BACK\n"
         "\n"
-        "    Ctrl+s\n"
+        "    " CTRL_OR_CMD "+s\n"
         "        click on APP_SWITCH\n"
         "\n"
         "    Ctrl+m\n"
         "        click on MENU\n"
         "\n"
-        "    Ctrl+Up\n"
+        "    " CTRL_OR_CMD "+Up\n"
         "        click on VOLUME_UP\n"
         "\n"
-        "    Ctrl+Down\n"
+        "    " CTRL_OR_CMD "+Down\n"
         "        click on VOLUME_DOWN\n"
         "\n"
-        "    Ctrl+p\n"
+        "    " CTRL_OR_CMD "+p\n"
         "        click on POWER (turn screen on/off)\n"
         "\n"
         "    Right-click (when screen is off)\n"
         "        power on\n"
         "\n"
-        "    Ctrl+o\n"
+        "    " CTRL_OR_CMD "+o\n"
         "        turn device screen off (keep mirroring)\n"
         "\n"
-        "    Ctrl+n\n"
+        "    " CTRL_OR_CMD "+n\n"
         "       expand notification panel\n"
         "\n"
-        "    Ctrl+Shift+n\n"
+        "    " CTRL_OR_CMD "+Shift+n\n"
         "       collapse notification panel\n"
         "\n"
-        "    Ctrl+c\n"
+        "    " CTRL_OR_CMD "+c\n"
         "        copy device clipboard to computer\n"
         "\n"
-        "    Ctrl+v\n"
+        "    " CTRL_OR_CMD "+v\n"
         "        paste computer clipboard to device\n"
         "\n"
-        "    Ctrl+Shift+v\n"
+        "    " CTRL_OR_CMD "+Shift+v\n"
         "        copy computer clipboard to device\n"
         "\n"
-        "    Ctrl+i\n"
+        "    " CTRL_OR_CMD "+i\n"
         "        enable/disable FPS counter (print frames/second in logs)\n"
         "\n"
         "    Drag & drop APK file\n"
@@ -295,6 +310,8 @@ guess_record_format(const char *filename) {
 }
 
 #define OPT_RENDER_EXPIRED_FRAMES 1000
+#define OPT_WINDOW_TITLE          1001
+#define OPT_PUSH_TARGET           1002
 
 static bool
 parse_args(struct args *args, int argc, char *argv[]) {
@@ -308,6 +325,8 @@ parse_args(struct args *args, int argc, char *argv[]) {
         {"no-control",            no_argument,       NULL, 'n'},
         {"no-display",            no_argument,       NULL, 'N'},
         {"port",                  required_argument, NULL, 'p'},
+        {"push-target",           required_argument, NULL,
+                                                 OPT_PUSH_TARGET},
         {"record",                required_argument, NULL, 'r'},
         {"record-format",         required_argument, NULL, 'f'},
         {"render-expired-frames", no_argument,       NULL,
@@ -316,6 +335,8 @@ parse_args(struct args *args, int argc, char *argv[]) {
         {"show-touches",          no_argument,       NULL, 't'},
         {"turn-screen-off",       no_argument,       NULL, 'S'},
         {"version",               no_argument,       NULL, 'v'},
+        {"window-title",          required_argument, NULL,
+                                                 OPT_WINDOW_TITLE},
         {NULL,                    0,                 NULL, 0  },
     };
     int c;
@@ -378,6 +399,12 @@ parse_args(struct args *args, int argc, char *argv[]) {
             case OPT_RENDER_EXPIRED_FRAMES:
                 args->render_expired_frames = true;
                 break;
+            case OPT_WINDOW_TITLE:
+                args->window_title = optarg;
+                break;
+            case OPT_PUSH_TARGET:
+                args->push_target = optarg;
+                break;
             default:
                 // getopt prints the error message on stderr
                 return false;
@@ -414,6 +441,11 @@ parse_args(struct args *args, int argc, char *argv[]) {
         }
     }
 
+    if (args->no_control && args->turn_screen_off) {
+        LOGE("Could not request to turn screen off if control is disabled");
+        return false;
+    }
+
     return true;
 }
 
@@ -429,6 +461,8 @@ main(int argc, char *argv[]) {
         .serial = NULL,
         .crop = NULL,
         .record_filename = NULL,
+        .window_title = NULL,
+        .push_target = NULL,
         .record_format = 0,
         .help = false,
         .version = false,
@@ -456,6 +490,8 @@ main(int argc, char *argv[]) {
         return 0;
     }
 
+    LOGI("scrcpy " SCRCPY_VERSION " <https://github.com/Genymobile/scrcpy>");
+
 #ifdef SCRCPY_LAVF_REQUIRES_REGISTER_ALL
     av_register_all();
 #endif
@@ -473,6 +509,8 @@ main(int argc, char *argv[]) {
         .crop = args.crop,
         .port = args.port,
         .record_filename = args.record_filename,
+        .window_title = args.window_title,
+        .push_target = args.push_target,
         .record_format = args.record_format,
         .max_size = args.max_size,
         .bit_rate = args.bit_rate,

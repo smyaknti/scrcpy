@@ -85,7 +85,7 @@ get_optimal_size(struct size current_size, struct size frame_size) {
     uint32_t h;
 
     if (!get_preferred_display_bounds(&display_size)) {
-        // cannot get display bounds, do not constraint the size
+        // could not get display bounds, do not constraint the size
         w = current_size.width;
         h = current_size.height;
     } else {
@@ -134,7 +134,7 @@ create_texture(SDL_Renderer *renderer, struct size frame_size) {
 }
 
 bool
-screen_init_rendering(struct screen *screen, const char *device_name,
+screen_init_rendering(struct screen *screen, const char *window_title,
                       struct size frame_size, bool always_on_top) {
     screen->frame_size = frame_size;
 
@@ -152,7 +152,7 @@ screen_init_rendering(struct screen *screen, const char *device_name,
 #endif
     }
 
-    screen->window = SDL_CreateWindow(device_name, SDL_WINDOWPOS_UNDEFINED,
+    screen->window = SDL_CreateWindow(window_title, SDL_WINDOWPOS_UNDEFINED,
                                       SDL_WINDOWPOS_UNDEFINED,
                                       window_size.width, window_size.height,
                                       window_flags);

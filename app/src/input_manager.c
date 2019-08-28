@@ -47,7 +47,7 @@ send_keycode(struct controller *controller, enum android_keycode keycode,
     if (actions & ACTION_DOWN) {
         msg.inject_keycode.action = AKEY_EVENT_ACTION_DOWN;
         if (!controller_push_msg(controller, &msg)) {
-            LOGW("Cannot request 'inject %s (DOWN)'", name);
+            LOGW("Could not request 'inject %s (DOWN)'", name);
             return;
         }
     }
@@ -55,7 +55,7 @@ send_keycode(struct controller *controller, enum android_keycode keycode,
     if (actions & ACTION_UP) {
         msg.inject_keycode.action = AKEY_EVENT_ACTION_UP;
         if (!controller_push_msg(controller, &msg)) {
-            LOGW("Cannot request 'inject %s (UP)'", name);
+            LOGW("Could not request 'inject %s (UP)'", name);
         }
     }
 }
@@ -102,7 +102,7 @@ press_back_or_turn_screen_on(struct controller *controller) {
     msg.type = CONTROL_MSG_TYPE_BACK_OR_SCREEN_ON;
 
     if (!controller_push_msg(controller, &msg)) {
-        LOGW("Cannot request 'turn screen on'");
+        LOGW("Could not request 'turn screen on'");
     }
 }
 
@@ -112,7 +112,7 @@ expand_notification_panel(struct controller *controller) {
     msg.type = CONTROL_MSG_TYPE_EXPAND_NOTIFICATION_PANEL;
 
     if (!controller_push_msg(controller, &msg)) {
-        LOGW("Cannot request 'expand notification panel'");
+        LOGW("Could not request 'expand notification panel'");
     }
 }
 
@@ -122,7 +122,7 @@ collapse_notification_panel(struct controller *controller) {
     msg.type = CONTROL_MSG_TYPE_COLLAPSE_NOTIFICATION_PANEL;
 
     if (!controller_push_msg(controller, &msg)) {
-        LOGW("Cannot request 'collapse notification panel'");
+        LOGW("Could not request 'collapse notification panel'");
     }
 }
 
@@ -132,7 +132,7 @@ request_device_clipboard(struct controller *controller) {
     msg.type = CONTROL_MSG_TYPE_GET_CLIPBOARD;
 
     if (!controller_push_msg(controller, &msg)) {
-        LOGW("Cannot request device clipboard");
+        LOGW("Could not request device clipboard");
     }
 }
 
@@ -140,7 +140,7 @@ static void
 set_device_clipboard(struct controller *controller) {
     char *text = SDL_GetClipboardText();
     if (!text) {
-        LOGW("Cannot get clipboard text: %s", SDL_GetError());
+        LOGW("Could not get clipboard text: %s", SDL_GetError());
         return;
     }
     if (!*text) {
@@ -155,7 +155,7 @@ set_device_clipboard(struct controller *controller) {
 
     if (!controller_push_msg(controller, &msg)) {
         SDL_free(text);
-        LOGW("Cannot request 'set device clipboard'");
+        LOGW("Could not request 'set device clipboard'");
     }
 }
 
@@ -167,7 +167,7 @@ set_screen_power_mode(struct controller *controller,
     msg.set_screen_power_mode.mode = mode;
 
     if (!controller_push_msg(controller, &msg)) {
-        LOGW("Cannot request 'set screen power mode'");
+        LOGW("Could not request 'set screen power mode'");
     }
 }
 
@@ -191,7 +191,7 @@ static void
 clipboard_paste(struct controller *controller) {
     char *text = SDL_GetClipboardText();
     if (!text) {
-        LOGW("Cannot get clipboard text: %s", SDL_GetError());
+        LOGW("Could not get clipboard text: %s", SDL_GetError());
         return;
     }
     if (!*text) {
@@ -205,7 +205,7 @@ clipboard_paste(struct controller *controller) {
     msg.inject_text.text = text;
     if (!controller_push_msg(controller, &msg)) {
         SDL_free(text);
-        LOGW("Cannot request 'paste clipboard'");
+        LOGW("Could not request 'paste clipboard'");
     }
 }
 
@@ -222,12 +222,12 @@ input_manager_process_text_input(struct input_manager *input_manager,
     msg.type = CONTROL_MSG_TYPE_INJECT_TEXT;
     msg.inject_text.text = SDL_strdup(event->text);
     if (!msg.inject_text.text) {
-        LOGW("Cannot strdup input text");
+        LOGW("Could not strdup input text");
         return;
     }
     if (!controller_push_msg(input_manager->controller, &msg)) {
         SDL_free(msg.inject_text.text);
-        LOGW("Cannot request 'inject text'");
+        LOGW("Could not request 'inject text'");
     }
 }
 
@@ -242,16 +242,27 @@ input_manager_process_key(struct input_manager *input_manager,
     bool alt = event->keysym.mod & (KMOD_LALT | KMOD_RALT);
     bool meta = event->keysym.mod & (KMOD_LGUI | KMOD_RGUI);
 
+    // use Cmd on macOS, Ctrl on other platforms
+#ifdef __APPLE__
+    bool cmd = !ctrl && meta;
+#else
+    if (meta) {
+        // no shortcuts involve Meta on platforms other than macOS, and it must
+        // not be forwarded to the device
+        return;
+    }
+    bool cmd = ctrl; // && !meta, already guaranteed
+#endif
+
     if (alt) {
-        // no shortcut involves Alt or Meta, and they should not be forwarded
-        // to the device
+        // no shortcuts involve Alt, and it must not be forwarded to the device
         return;
     }
 
     struct controller *controller = input_manager->controller;
 
     // capture all Ctrl events
-    if (ctrl | meta) {
+    if (ctrl || cmd) {
         SDL_Keycode keycode = event->keysym.sym;
         bool down = event->type == SDL_KEYDOWN;
         int action = down ? ACTION_DOWN : ACTION_UP;
@@ -259,63 +270,59 @@ input_manager_process_key(struct input_manager *input_manager,
         bool shift = event->keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT);
         switch (keycode) {
             case SDLK_h:
+                // Ctrl+h on all platform, since Cmd+h is already captured by
+                // the system on macOS to hide the window
                 if (control && ctrl && !meta && !shift && !repeat) {
                     action_home(controller, action);
                 }
                 return;
             case SDLK_b: // fall-through
             case SDLK_BACKSPACE:
-                if (control && ctrl && !meta && !shift && !repeat) {
+                if (control && cmd && !shift && !repeat) {
                     action_back(controller, action);
                 }
                 return;
             case SDLK_s:
-                if (control && ctrl && !meta && !shift && !repeat) {
+                if (control && cmd && !shift && !repeat) {
                     action_app_switch(controller, action);
                 }
                 return;
             case SDLK_m:
+                // Ctrl+m on all platform, since Cmd+m is already captured by
+                // the system on macOS to minimize the window
                 if (control && ctrl && !meta && !shift && !repeat) {
                     action_menu(controller, action);
                 }
                 return;
             case SDLK_p:
-                if (control && ctrl && !meta && !shift && !repeat) {
+                if (control && cmd && !shift && !repeat) {
                     action_power(controller, action);
                 }
                 return;
             case SDLK_o:
-                if (control && ctrl && !shift && !meta && down) {
+                if (control && cmd && !shift && down) {
                     set_screen_power_mode(controller, SCREEN_POWER_MODE_OFF);
                 }
                 return;
             case SDLK_DOWN:
-#ifdef __APPLE__
-                if (control && !ctrl && meta && !shift) {
-#else
-                if (control && ctrl && !meta && !shift) {
-#endif
+                if (control && cmd && !shift) {
                     // forward repeated events
                     action_volume_down(controller, action);
                 }
                 return;
             case SDLK_UP:
-#ifdef __APPLE__
-                if (control && !ctrl && meta && !shift) {
-#else
-                if (control && ctrl && !meta && !shift) {
-#endif
+                if (control && cmd && !shift) {
                     // forward repeated events
                     action_volume_up(controller, action);
                 }
                 return;
             case SDLK_c:
-                if (control && ctrl && !meta && !shift && !repeat && down) {
+                if (control && cmd && !shift && !repeat && down) {
                     request_device_clipboard(controller);
                 }
                 return;
             case SDLK_v:
-                if (control && ctrl && !meta && !repeat && down) {
+                if (control && cmd && !repeat && down) {
                     if (shift) {
                         // store the text in the device clipboard
                         set_device_clipboard(controller);
@@ -326,29 +333,29 @@ input_manager_process_key(struct input_manager *input_manager,
                 }
                 return;
             case SDLK_f:
-                if (ctrl && !meta && !shift && !repeat && down) {
+                if (!shift && cmd && !repeat && down) {
                     screen_switch_fullscreen(input_manager->screen);
                 }
                 return;
             case SDLK_x:
-                if (ctrl && !meta && !shift && !repeat && down) {
+                if (!shift && cmd && !repeat && down) {
                     screen_resize_to_fit(input_manager->screen);
                 }
                 return;
             case SDLK_g:
-                if (ctrl && !meta && !shift && !repeat && down) {
+                if (!shift && cmd && !repeat && down) {
                     screen_resize_to_pixel_perfect(input_manager->screen);
                 }
                 return;
             case SDLK_i:
-                if (ctrl && !meta && !shift && !repeat && down) {
+                if (!shift && cmd && !repeat && down) {
                     struct fps_counter *fps_counter =
                         input_manager->video_buffer->fps_counter;
                     switch_fps_counter_state(fps_counter);
                 }
                 return;
             case SDLK_n:
-                if (control && ctrl && !meta && !repeat && down) {
+                if (control && cmd && !repeat && down) {
                     if (shift) {
                         collapse_notification_panel(controller);
                     } else {
@@ -368,7 +375,7 @@ input_manager_process_key(struct input_manager *input_manager,
     struct control_msg msg;
     if (input_key_from_sdl_to_android(event, &msg)) {
         if (!controller_push_msg(controller, &msg)) {
-            LOGW("Cannot request 'inject keycode'");
+            LOGW("Could not request 'inject keycode'");
         }
     }
 }
@@ -385,7 +392,7 @@ input_manager_process_mouse_motion(struct input_manager *input_manager,
                                          input_manager->screen->frame_size,
                                          &msg)) {
         if (!controller_push_msg(input_manager->controller, &msg)) {
-            LOGW("Cannot request 'inject mouse motion event'");
+            LOGW("Could not request 'inject mouse motion event'");
         }
     }
 }
@@ -431,7 +438,7 @@ input_manager_process_mouse_button(struct input_manager *input_manager,
                                          input_manager->screen->frame_size,
                                          &msg)) {
         if (!controller_push_msg(input_manager->controller, &msg)) {
-            LOGW("Cannot request 'inject mouse button event'");
+            LOGW("Could not request 'inject mouse button event'");
         }
     }
 }
@@ -446,7 +453,7 @@ input_manager_process_mouse_wheel(struct input_manager *input_manager,
     struct control_msg msg;
     if (mouse_wheel_from_sdl_to_android(event, position, &msg)) {
         if (!controller_push_msg(input_manager->controller, &msg)) {
-            LOGW("Cannot request 'inject mouse wheel event'");
+            LOGW("Could not request 'inject mouse wheel event'");
         }
     }
 }

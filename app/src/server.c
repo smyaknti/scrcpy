@@ -35,7 +35,7 @@ get_server_path(void) {
     // use scrcpy-server.jar in the same directory as the executable
     char *executable_path = get_executable_path();
     if (!executable_path) {
-        LOGE("Cannot get executable path, "
+        LOGE("Could not get executable path, "
              "using " SERVER_FILENAME " from current directory");
         // not found, use current directory
         return SERVER_FILENAME;
@@ -47,7 +47,7 @@ get_server_path(void) {
     size_t len = dirlen + 1 + sizeof(SERVER_FILENAME);
     char *server_path = SDL_malloc(len);
     if (!server_path) {
-        LOGE("Cannot alloc server path string, "
+        LOGE("Could not alloc server path string, "
              "using " SERVER_FILENAME " from current directory");
         SDL_free(executable_path);
         return SERVER_FILENAME;
@@ -130,7 +130,7 @@ execute_server(struct server *server, const struct server_params *params) {
         bit_rate_string,
         server->tunnel_forward ? "true" : "false",
         params->crop ? params->crop : "-",
-        params->send_frame_meta ? "true" : "false",
+        "true", // always send frame meta (packet boundaries + timestamp)
         params->control ? "true" : "false",
     };
     return adb_execute(server->serial, cmd, sizeof(cmd) / sizeof(cmd[0]));
@@ -155,6 +155,7 @@ connect_and_read_byte(uint16_t port) {
     // is not listening, so read one byte to detect a working connection
     if (net_recv(socket, &byte, 1) != 1) {
         // the server is not listening yet behind the adb tunnel
+        net_close(socket);
         return INVALID_SOCKET;
     }
     return socket;
@@ -181,7 +182,7 @@ close_socket(socket_t *socket) {
     SDL_assert(*socket != INVALID_SOCKET);
     net_shutdown(*socket, SHUT_RDWR);
     if (!net_close(*socket)) {
-        LOGW("Cannot close socket");
+        LOGW("Could not close socket");
         return;
     }
     *socket = INVALID_SOCKET;
@@ -305,7 +306,7 @@ server_stop(struct server *server) {
     SDL_assert(server->process != PROCESS_NONE);
 
     if (!cmd_terminate(server->process)) {
-        LOGW("Cannot terminate server");
+        LOGW("Could not terminate server");
     }
 
     cmd_simple_wait(server->process, NULL); // ignore exit code

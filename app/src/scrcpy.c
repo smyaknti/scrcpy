@@ -259,7 +259,7 @@ av_log_callback(void *avcl, int level, const char *fmt, va_list vl) {
     }
     char *local_fmt = SDL_malloc(strlen(fmt) + 10);
     if (!local_fmt) {
-        LOGC("Cannot allocate string");
+        LOGC("Could not allocate string");
         return;
     }
     // strcpy is safe here, the destination is large enough
@@ -277,7 +277,6 @@ scrcpy(const struct scrcpy_options *options) {
         .local_port = options->port,
         .max_size = options->max_size,
         .bit_rate = options->bit_rate,
-        .send_frame_meta = record,
         .control = options->control,
     };
     if (!server_start(&server, options->serial, &params)) {
@@ -334,7 +333,8 @@ scrcpy(const struct scrcpy_options *options) {
         video_buffer_initialized = true;
 
         if (options->control) {
-            if (!file_handler_init(&file_handler, server.serial)) {
+            if (!file_handler_init(&file_handler, server.serial,
+                                   options->push_target)) {
                 goto end;
             }
             file_handler_initialized = true;
@@ -380,7 +380,10 @@ scrcpy(const struct scrcpy_options *options) {
             controller_started = true;
         }
 
-        if (!screen_init_rendering(&screen, device_name, frame_size,
+        const char *window_title =
+            options->window_title ? options->window_title : device_name;
+
+        if (!screen_init_rendering(&screen, window_title, frame_size,
                                    options->always_on_top)) {
             goto end;
         }
@@ -391,7 +394,7 @@ scrcpy(const struct scrcpy_options *options) {
             msg.set_screen_power_mode.mode = SCREEN_POWER_MODE_OFF;
 
             if (!controller_push_msg(&controller, &msg)) {
-                LOGW("Cannot request 'set screen power mode'");
+                LOGW("Could not request 'set screen power mode'");
             }
         }
 
